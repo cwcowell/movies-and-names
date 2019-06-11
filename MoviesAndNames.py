@@ -1,17 +1,131 @@
-from bs4 import BeautifulSoup
 import os
 import pickle
-import pandas as pd
 import re
-import requests
 import sys
 import zipfile
+
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
 START_YEAR = 1880
 END_YEAR = 2018
 POPULARITY_WINDOW = 1
 
-MAX_CHARS_PER_MOVIE = 5
+MAX_CHARS_PER_MOVIE = 10
+
+NAME_BLACKLIST = ['1st',
+                  'admiral',
+                  'adolescent',
+                  'adult',
+                  'agent',
+                  'airport',
+                  'aunt',
+                  'captain',
+                  'baroness',
+                  'big',
+                  'bike',
+                  'blue',
+                  'butler',
+                  'buying',
+                  'capt',
+                  'carjacker',
+                  'carnival',
+                  'chancellor',
+                  'chief',
+                  'cmdr',
+                  'col',
+                  'college',
+                  'colonel',
+                  'constable',
+                  'count',
+                  'cpl',
+                  '(credit',
+                  'criminologist',
+                  'deputy',
+                  'det',
+                  'director',
+                  'doc',
+                  'doorman',
+                  'dr',
+                  'drill',
+                  'elder',
+                  'emperor',
+                  'father',
+                  'fbi',
+                  'female',
+                  'first',
+                  'fräulein',
+                  'friend',
+                  'gen',
+                  'general',
+                  'gov',
+                  'governor',
+                  'grand',
+                  'great',
+                  'herself',
+                  'high',
+                  'himself',
+                  'hot',
+                  'insp',
+                  'inspector',
+                  'king',
+                  'lady',
+                  'leader',
+                  'lieutenant',
+                  'little',
+                  'lord',
+                  'lt',
+                  'madame',
+                  'maestro',
+                  'maj',
+                  'magic',
+                  'major',
+                  'mayor',
+                  'moff',
+                  'monsieur',
+                  'mr',
+                  'mrs',
+                  'narrator',
+                  'nurse',
+                  'of',
+                  'officer',
+                  'old',
+                  'only)',
+                  'orderly',
+                  'pirate',
+                  'police',
+                  'president',
+                  'prince',
+                  'princess',
+                  'professor',
+                  'project',
+                  'purplehaired',
+                  'pvt',
+                  'queen',
+                  'quizmaster',
+                  'rev',
+                  'reverend',
+                  'ringmaster',
+                  'saloon',
+                  'school',
+                  '(segment',
+                  'senator',
+                  'sergeant',
+                  'soloist',
+                  'sgt',
+                  'sheriff',
+                  'ssgt',
+                  'supreme',
+                  'the',
+                  'train',
+                  'turkish',
+                  'usaf',
+                  'warden',
+                  'woman',
+                  'young',
+                  '(voice)',
+                  '/']
 
 NAME_DATA_DIR = 'name_data'
 NAME_DATA_SAMPLE_FNAME = 'yob1900.txt'
@@ -56,6 +170,7 @@ def name_data_zip_exists():
 
 
 def download_name_data_zip():
+    print(f"downloading '{NAME_DATA_ZIP_FNAME}' from '{NAME_DATA_URL}'")
     response = requests.get(NAME_DATA_URL)
     status_code = response.status_code
     expected_status_code = 200
@@ -67,6 +182,7 @@ def download_name_data_zip():
 
 
 def unzip_name_data_zip():
+    print(f"unzipping '{NAME_DATA_ZIP_FNAME}' into dir '{NAME_DATA_DIR}'")
     if not dir_exists(NAME_DATA_DIR):
         os.mkdir(NAME_DATA_DIR)
 
@@ -109,7 +225,10 @@ def get_character_data():
     character_data = []
     for title, year in titles_and_years:
         characters_from_one_movie = get_characters_in_movie(title, year)
-        character_data.append((title, year, characters_from_one_movie))
+        character_data_entry = {'title': title,
+                                'year': year,
+                                'characters': characters_from_one_movie}
+        character_data.append(character_data_entry)
     return character_data
 
 
@@ -140,27 +259,35 @@ def parse_titles_and_years_html():
     div = soup.find(id='mainBodyWrapper')
     all_movie_details_raw = div.find_all('li')
     all_movie_details = [one_movie_details_raw.get_text() for one_movie_details_raw in all_movie_details_raw]
-    all_movie_details = replace_chars(all_movie_details, '\n', ' ')
-    all_movie_details = replace_chars(all_movie_details, '[ ]+', ' ')
-    all_movie_details = replace_chars(all_movie_details, '^ ', '')
-    all_movie_details = replace_chars(all_movie_details, ',', ' ')
+    all_movie_details = replace_substring_in_all_movie_details(all_movie_details, '\n', ' ')
+    all_movie_details = replace_substring_in_all_movie_details(all_movie_details, '[ ]+', ' ')
+    all_movie_details = replace_substring_in_all_movie_details(all_movie_details, '^ ', '')
+    all_movie_details = replace_substring_in_all_movie_details(all_movie_details, ',', '')
 
     titles_and_years = []
     for single_movie_details in all_movie_details:
         details_regex = re.compile(r'^(.+?) \((\d+)')  # group #1 is title, group #2 is year
         match = details_regex.match(single_movie_details)
         title = match.group(1)
-        year = match.group(2)
+        year_as_str = match.group(2)
+        year = int(year_as_str)
         titles_and_years.append((title, year))
     return titles_and_years
 
 
-def replace_chars(all_movie_details, old_regex, new_char):
-    return [re.sub(old_regex, new_char, one_movie_details) for one_movie_details in all_movie_details]
+def replace_substring_in_all_movie_details(all_movie_details, old_regex, new_char):
+    return [replace_substring(one_movie_details, old_regex, new_char) for one_movie_details in all_movie_details]
+
+
+def replace_substring(text, old_regex, new_char):
+    return re.sub(old_regex, new_char, text)
+
+
+def replace_char(text, old_regex, new_char):
+    return re.sub(old_regex, new_char, text)
 
 
 def get_characters_in_movie(title, year):
-    print(f'getting characters in {title}')
     download_characters_from_movie(title, year)
     return parse_characters_file(title)
 
@@ -173,23 +300,19 @@ def download_characters_from_movie(title, year):
     pickled_chars_fpath = os.path.join(os.getcwd(), PICKLED_CHARS_DIR, pickled_chars_fname)
 
     if not file_exists(pickled_chars_fpath):
-        print(f'  getting ID of {title}')
         url = f'https://api.themoviedb.org/3/search/movie?query={title}&year={year}&api_key={THE_MOVIE_DB_API_KEY}'
         response = requests.get(url)
         movie_id = response.json()['results'][0]['id']
 
         # use the movie's ID to get the movie's cast
-        print(f'  getting cast of {title}')
         url = f'https://api.themoviedb.org/3/movie/{movie_id}/credits?api_key={THE_MOVIE_DB_API_KEY}'
         response = requests.get(url)
         cast = response.json()['cast']
 
         # pickle the movie's entire cast so we don't have to spam the API during development
         with open(pickled_chars_fpath, 'wb') as pickled_chars_file:
-            print(f'  pickling cast of {title}')
+            print(f'pickling cast of {title}')
             pickle.dump(cast, pickled_chars_file)
-    else:
-        print(f'  pickle file already exists for {title}')
 
 
 def parse_characters_file(title):
@@ -201,12 +324,24 @@ def parse_characters_file(title):
         for one_character_data in all_character_data[:MAX_CHARS_PER_MOVIE]:
             one_character_full_name = one_character_data['character']
             one_character_first_name = extract_first_name(one_character_full_name)
-            main_characters.append(one_character_first_name)
+            if (one_character_first_name not in main_characters) and (one_character_first_name != ''):
+                main_characters.append(one_character_first_name)
         return main_characters
 
 
 def extract_first_name(full_name):
-    pass
+    full_name = replace_char(full_name, '/', ' ')  # break up characters that are listed like "sam/bill"
+    split_name = [name_part.lower() for name_part in full_name.split()]
+    for name_part in split_name:
+        name_part = replace_char(name_part, '\.', '')
+        name_part = replace_char(name_part, '-', '')
+        name_part = replace_char(name_part, 'é', 'e')
+        name_part = replace_char(name_part, 'è', 'e')
+        name_part = replace_char(name_part, "'", '')
+        if name_part not in NAME_BLACKLIST:
+            return name_part
+    return ''
+
 
 # --- UTILS ---
 
@@ -222,6 +357,7 @@ def file_exists(path):
 
 name_data = get_name_data()
 character_data = get_character_data()
-print('hi')
 # for name_year in range(START_YEAR, END_YEAR + 1):
 #     print(f'{name_year}: {get_popularity(name_data, "Michael", name_year, 2)}%')
+for entry in character_data:
+    print(entry)
