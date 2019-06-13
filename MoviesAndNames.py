@@ -156,6 +156,7 @@ def get_name_data():
                                names=['name', 'sex', 'num_births'],
                                usecols=['name', 'num_births'],
                                index_col='name')
+        names_df['name'] = names_df['name'].str.lower()  # make all names lower case
         data[year] = names_df
     return data
 
@@ -359,5 +360,15 @@ name_data = get_name_data()
 character_data = get_character_data()
 # for name_year in range(START_YEAR, END_YEAR + 1):
 #     print(f'{name_year}: {get_popularity(name_data, "Michael", name_year, 2)}%')
-for entry in character_data:
-    print(entry)
+# for entry in character_data:
+#     print(entry)
+
+for one_movie_data in character_data:
+    title = one_movie_data['title']
+    release_year = one_movie_data['year'] + 1
+    characters = one_movie_data['characters']
+
+    for character in characters:
+        pre_release_popularity = get_popularity(name_data, character, release_year - 1)
+        post_release_popularity = get_popularity(name_data, character, release_year + 1, POPULARITY_WINDOW)
+        print(character, pre_release_popularity, post_release_popularity)
